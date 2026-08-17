@@ -14,10 +14,16 @@ export interface AutoCaptureConfig {
 }
 
 export interface InitConfig {
-  /** The `ingest` edge function URL. Missing this (or ingestKey) makes the whole module no-op. */
-  url: string;
-  /** Per-app ingest key. Semi-public -- identifies the app, does not authorize arbitrary access. */
-  ingestKey: string;
+  /**
+   * The `ingest` edge function URL. Optional in the type because init()
+   * genuinely accepts it being unset (e.g. a not-yet-configured env var) and
+   * safely no-ops the whole module rather than throwing -- see the
+   * "commented out env var = inert" pattern in consuming apps' .env.example.
+   * Required in practice for analytics to actually send anything.
+   */
+  url?: string;
+  /** Per-app ingest key. Same optionality note as `url` -- missing either one no-ops init(). */
+  ingestKey?: string;
   /** Informational only -- the server resolves the real app_id from ingestKey. */
   appId?: string;
   environment?: string;
