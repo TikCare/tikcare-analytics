@@ -1,6 +1,6 @@
 {
   "name": "tikcare-analytics",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Framework-agnostic tracking SDK shared across MindVault, Medical Scribe, and HealthSeer PWA. Pure ESM, zero dependencies, zero build step.",
   "type": "module",
   "main": "./src/index.js",
@@ -15,7 +15,7 @@
     "src"
   ],
   "scripts": {
-    "test": "node --import ./test/register-loader.mjs --test --test-reporter=spec test/merge-assertions.test.mjs"
+    "test": "node --test --test-reporter=spec test/merge-assertions.test.mjs"
   },
   "license": "UNLICENSED",
   "private": true

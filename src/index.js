@@ -5,13 +5,13 @@
 // that via init(). Keep it that way or the SDK extraction becomes a rewrite.
 //
 // All public paths are try/catch-wrapped: analytics must never break the app.
-import { newId, getAnonymousId, getSessionId, isReturning } from './id';
-import { sanitizeProps, uuidOrNull, scrubPath } from './sanitize';
-import { collectContext, collectUtm } from './context';
-import { configureQueue, enqueue, flushQueue, claimDropCount } from './queue';
-import { attachAutocapture } from './autocapture';
+import { newId, getAnonymousId, getSessionId, isReturning } from './id.js';
+import { sanitizeProps, uuidOrNull, scrubPath } from './sanitize.js';
+import { collectContext, collectUtm } from './context.js';
+import { configureQueue, enqueue, flushQueue, claimDropCount } from './queue.js';
+import { attachAutocapture } from './autocapture.js';
 
-export { EVENTS } from './taxonomy';
+export { EVENTS } from './taxonomy.js';
 
 let cfg = null;
 let utm = {};

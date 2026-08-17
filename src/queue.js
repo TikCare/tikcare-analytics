@@ -3,7 +3,7 @@
 // properties.dropped_since_last (v2 fix: no silent data loss).
 // event_id is minted BEFORE events reach here (at track() time) and is never
 // regenerated, so retries and beacons dedupe server-side.
-import { send, beacon } from './transport';
+import { send, beacon } from './transport.js';
 
 const FLUSH_AT = 20;
 const FLUSH_MS = 10 * 1000;
