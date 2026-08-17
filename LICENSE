@@ -1,0 +1,11 @@
+Copyright (c) 2026 TikCare. All rights reserved.
+
+This repository is source-visible for engineering convenience (so it can be
+installed as a plain git dependency by TikCare's own applications without a
+private package registry) — it is NOT open source. No license is granted to
+any party to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of this software, in whole or in part, except to TikCare
+and to individuals or systems explicitly authorized by TikCare.
+
+package.json's "license": "UNLICENSED" field reflects the same thing in
+machine-readable (SPDX) form.
