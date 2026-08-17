@@ -1,6 +1,6 @@
 {
   "name": "tikcare-analytics",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Framework-agnostic tracking SDK shared across MindVault, Medical Scribe, and HealthSeer PWA. Pure ESM, zero dependencies, zero build step.",
   "type": "module",
   "main": "./src/index.js",

@@ -339,6 +339,178 @@ function renderDataHealthCard(rows, appId) {
   return card;
 }
 
+// ---------------------------------------------------- Tab 2 (engine) ----
+
+function fmtBytes(n) {
+  if (n == null) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let v = n, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toFixed(v < 10 && i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+function renderClassificationCard(rows) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h2>Classification failure rate</h2>
+    <div class="def">v_classification_failure_daily. Baseline is 0 across the whole table at authoring time — alert threshold is fallback_rate &gt; 1%, sustained 15min (see the PLAN-0814 runbook for the actual alert wiring; this card is the same number, just graphed).</div>`;
+  const sorted = [...rows].sort((a, b) => a.day.localeCompare(b.day));
+  if (!sorted.length) {
+    card.innerHTML += '<div class="placeholder">No classification data in this window.</div>';
+    return card;
+  }
+  const categories = sorted.map((r) => r.day);
+  card.appendChild(lineChart(categories, [
+    { label: 'fallback_rate', color: '#e35d5d', values: sorted.map((r) => r.fallback_rate == null ? null : r.fallback_rate * 100) },
+  ]));
+  const latest = sorted[sorted.length - 1];
+  const latestRate = latest.fallback_rate == null ? null : Math.round(latest.fallback_rate * 1000) / 10;
+  const row = document.createElement('div');
+  row.className = 'metric-row';
+  row.innerHTML = `
+    <div class="metric"><div class="value ${latestRate != null && latestRate > 1 ? 'bad' : 'ok'}">${fmtPct(latestRate)}</div><div class="label">latest day fallback_rate</div></div>
+    <div class="metric"><div class="value dim">${latest.attempted ?? 0}</div><div class="label">attempted, latest day</div></div>`;
+  card.appendChild(row);
+  return card;
+}
+
+function renderExtractionCard(rows) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h2>Extraction failure / abandonment</h2>
+    <div class="def">v_extraction_retry_daily. abandoned is a terminal give-up state, shown as its own number below — never folded into retry_rate as an average.</div>`;
+  const sorted = [...rows].sort((a, b) => a.day.localeCompare(b.day));
+  if (!sorted.length) {
+    card.innerHTML += '<div class="placeholder">No extraction data in this window.</div>';
+    return card;
+  }
+  const categories = sorted.map((r) => r.day);
+  card.appendChild(groupedBarChart(categories, [
+    { label: 'first_try_success', color: '#3ecf8e', values: sorted.map((r) => r.first_try_success) },
+    { label: 'retried', color: '#e0a634', values: sorted.map((r) => r.retried) },
+  ], { labelEvery: Math.max(1, Math.ceil(categories.length / 8)) }));
+  const totalAbandoned = sorted.reduce((a, r) => a + (r.abandoned || 0), 0);
+  const totalRetried = sorted.reduce((a, r) => a + (r.retried || 0), 0);
+  const row = document.createElement('div');
+  row.className = 'metric-row';
+  row.innerHTML = `
+    <div class="metric"><div class="value ${totalAbandoned > 0 ? 'bad' : 'ok'}">${totalAbandoned}</div><div class="label">abandoned, this window (terminal — always alert on this)</div></div>
+    <div class="metric"><div class="value dim">${totalRetried}</div><div class="label">retried, this window</div></div>`;
+  card.appendChild(row);
+  return card;
+}
+
+function renderStorageCard(rows) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h2>Per-user storage trend</h2>
+    <div class="def">v_storage_growth_daily. Empty until snapshot_storage_daily() has run at least once — confirm pg_cron is actually enabled in TC_MEM before assuming "no growth" (the runbook flags 025's schedule as a silent no-op otherwise).</div>`;
+  const sorted = [...rows].sort((a, b) => a.day.localeCompare(b.day));
+  if (!sorted.length) {
+    card.innerHTML += '<div class="placeholder banner info">No rows yet — either no growth, or snapshot_storage_daily() / pg_cron has never run. Check the runbook before assuming the former.</div>';
+    return card;
+  }
+  const categories = sorted.map((r) => r.day);
+  card.appendChild(lineChart(categories, [
+    { label: 'avg_bytes_per_user', color: '#4f8cff', values: sorted.map((r) => r.avg_bytes_per_user) },
+  ]));
+  const latest = sorted[sorted.length - 1];
+  const row = document.createElement('div');
+  row.className = 'metric-row';
+  row.innerHTML = `
+    <div class="metric"><div class="value">${fmtBytes(latest.avg_bytes_per_user)}</div><div class="label">avg / user, latest day</div></div>
+    <div class="metric"><div class="value dim">${fmtBytes(latest.total_bytes)}</div><div class="label">total, latest day</div></div>
+    <div class="metric"><div class="value dim">${latest.users_with_data ?? 0}</div><div class="label">users with data</div></div>`;
+  card.appendChild(row);
+  return card;
+}
+
+function renderUsageCard(rows) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h2>LLM call volume</h2>
+    <div class="def">v_usage_calls_daily. One row per (day, endpoint) — summed to a daily total for the chart below; per-endpoint breakdown in the table.</div>`;
+  if (!rows.length) {
+    card.innerHTML += '<div class="placeholder">No usage data in this window.</div>';
+    return card;
+  }
+  const byDay = groupSum(rows, (r) => r.day, 'calls');
+  const days = Array.from(byDay.keys()).sort();
+  card.appendChild(groupedBarChart(days, [
+    { label: 'calls', color: '#4f8cff', values: days.map((d) => byDay.get(d)) },
+  ], { labelEvery: Math.max(1, Math.ceil(days.length / 8)) }));
+
+  const byEndpoint = groupSum(rows, (r) => r.endpoint, 'calls');
+  const sortedEndpoints = Array.from(byEndpoint.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const table = document.createElement('table');
+  table.className = 'breakdown';
+  table.innerHTML = '<tr><th>endpoint</th><th>calls, this window</th></tr>' +
+    sortedEndpoints.map(([ep, calls]) => `<tr><td>${escapeHtml(ep)}</td><td>${calls}</td></tr>`).join('');
+  card.appendChild(table);
+  return card;
+}
+
+function renderCostCard(llmCost) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h2>LLM cost (estimate)</h2>
+    <div class="def">v_llm_cost_daily_estimate. A point estimate built on an owner-maintained price sheet, not measured token spend — never rendered as $0.00 for an unpriced endpoint.</div>`;
+  const rows = (llmCost && llmCost.rows) || [];
+  if (!rows.length) {
+    card.innerHTML += '<div class="placeholder">No call volume in this window.</div>';
+    return card;
+  }
+  if (!llmCost.any_priced) {
+    card.innerHTML += '<div class="banner info">llm_price_sheet is empty — every endpoint is unpriced. Call volume is real (see LLM call volume card); cost cannot be estimated until someone who owns the price basis populates the sheet.</div>';
+    return card;
+  }
+  const byDay = new Map();
+  rows.forEach((r) => {
+    if (!r.priced) return;
+    byDay.set(r.day, (byDay.get(r.day) || 0) + (r.estimated_cost_usd || 0));
+  });
+  const days = Array.from(byDay.keys()).sort();
+  card.appendChild(groupedBarChart(days, [
+    { label: 'estimated_cost_usd', color: '#3ecf8e', values: days.map((d) => byDay.get(d)) },
+  ], { labelEvery: Math.max(1, Math.ceil(days.length / 8)) }));
+
+  const unpricedEndpoints = new Set(rows.filter((r) => !r.priced).map((r) => r.endpoint));
+  const totalCost = days.reduce((a, d) => a + byDay.get(d), 0);
+  const row = document.createElement('div');
+  row.className = 'metric-row';
+  row.innerHTML = `<div class="metric"><div class="value ok">$${totalCost.toFixed(2)}</div><div class="label">estimated, this window (priced endpoints only)</div></div>`;
+  card.appendChild(row);
+  if (unpricedEndpoints.size) {
+    const warn = document.createElement('div');
+    warn.className = 'banner info';
+    warn.textContent = 'Still unpriced, excluded from the total above: ' + Array.from(unpricedEndpoints).join(', ');
+    card.appendChild(warn);
+  }
+  return card;
+}
+
+function renderGcpLinkCard() {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h2>p95 latency / health hit-rate</h2>
+    <div class="def">Native GCP metrics — deliberately not rebuilt here (§3.3). As of this dashboard's last update, both are flagged "not yet set up" in the PLAN-0814 runbook: someone with gcloud access still needs to run the two dashboard-creation commands there.</div>
+    <p style="margin:12px 0;"><a href="https://console.cloud.google.com/monitoring/dashboards?project=tikcare-d0cb9" target="_blank" rel="noopener">Open GCP Monitoring — tikcare-d0cb9 ↗</a></p>
+    <p style="color:var(--text-dim);font-size:12px;">See docs/PLAN-0814-monitoring-runbook.md (tikcare-memory repo) §Metric #4/#5 for the exact <code>gcloud monitoring dashboards create</code> commands.</p>`;
+  return card;
+}
+
+function renderEngineTab() {
+  const grid = document.getElementById('engine-grid');
+  grid.innerHTML = '';
+  if (!currentEngineData) return;
+  grid.appendChild(renderClassificationCard(currentEngineData.classification_failure || []));
+  grid.appendChild(renderExtractionCard(currentEngineData.extraction_retry || []));
+  grid.appendChild(renderStorageCard(currentEngineData.storage_growth || []));
+  grid.appendChild(renderUsageCard(currentEngineData.usage_calls || []));
+  grid.appendChild(renderCostCard(currentEngineData.llm_cost || { rows: [], any_priced: false }));
+  grid.appendChild(renderGcpLinkCard());
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -347,6 +519,7 @@ function escapeHtml(s) {
 
 let currentEventsData = null;
 let currentAppId = null;
+let currentEngineData = null;
 
 function renderProductTab() {
   const grid = document.getElementById('product-grid');
@@ -417,24 +590,50 @@ async function boot() {
   document.getElementById('header-sub').textContent = 'Loading last 90 days…';
   showBanner(null);
 
-  try {
-    currentEventsData = await fetchStats(cfg.eventsUrl, cfg.key, 90);
-    document.getElementById('header-sub').textContent =
-      `Window: last ${currentEventsData.window_days} days · updated ${new Date().toLocaleString()}`;
+  // Both tabs fetch on boot rather than lazily-on-click: the acceptance
+  // criteria (§3.4) is answering three questions -- one per tab -- inside
+  // 10 seconds of opening the link, which a first click-triggered fetch
+  // would eat into.
+  const [eventsResult, engineResult] = await Promise.allSettled([
+    fetchStats(cfg.eventsUrl, cfg.key, 90),
+    fetchStats(cfg.engineUrl, cfg.key, 90),
+  ]);
+
+  if (eventsResult.status === 'rejected' && eventsResult.reason && eventsResult.reason.authFailure) {
+    showGate('Access key was rejected — check the key and try again.');
+    return;
+  }
+
+  const bannerParts = [];
+
+  if (eventsResult.status === 'fulfilled') {
+    currentEventsData = eventsResult.value;
     if (currentEventsData.errors) {
-      showBanner('Some views failed to load: ' + Object.keys(currentEventsData.errors).join(', ') +
-        ' — see dashboard/functions/README.md for what each means.', 'error');
+      bannerParts.push('Product behavior: some views failed to load (' +
+        Object.keys(currentEventsData.errors).join(', ') + ')');
     }
     renderAppSwitcher();
     renderProductTab();
-  } catch (e) {
-    if (e.authFailure) {
-      showGate('Access key was rejected — check the key and try again.');
-      return;
-    }
+  } else {
     document.getElementById('product-grid').innerHTML = '';
-    showBanner('Failed to load dashboard-stats-events: ' + e.message, 'error');
+    bannerParts.push('Failed to load dashboard-stats-events: ' + eventsResult.reason.message);
   }
+
+  if (engineResult.status === 'fulfilled') {
+    currentEngineData = engineResult.value;
+    if (currentEngineData.errors) {
+      bannerParts.push('Engine health: some views failed to load (' +
+        Object.keys(currentEngineData.errors).join(', ') + ')');
+    }
+    renderEngineTab();
+  } else {
+    document.getElementById('engine-grid').innerHTML = '';
+    bannerParts.push('Failed to load dashboard-stats-engine: ' + engineResult.reason.message);
+  }
+
+  document.getElementById('header-sub').textContent =
+    `Window: last 90 days · updated ${new Date().toLocaleString()}`;
+  showBanner(bannerParts.length ? bannerParts.join(' · ') + ' — see dashboard/functions/README.md.' : null, 'error');
 }
 
 boot();
