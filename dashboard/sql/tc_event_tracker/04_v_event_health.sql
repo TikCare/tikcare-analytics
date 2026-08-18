@@ -9,31 +9,34 @@
 --       tikcare-analytics' own field name (src/index.js's assemble()) --
 --       queue_dropped in the plan's prose IS this field, just renamed for
 --       the chart. Solid.
---   a server-received timestamp, for clock_skew        -- NOT CONFIRMED AT ALL.
---       occurred_at is the CLIENT's clock; detecting client clock skew needs
---       a second, server-stamped timestamp to diff against, and I have no
---       evidence such a column exists under any name. Left commented out
---       below rather than guessing a name -- uncomment and fix the column
---       name once 00_verify_schema.sql confirms what it's actually called
---       (candidates to check for: received_at, ingested_at, server_ts,
---       created_at). If no such column exists at all, clock_skew genuinely
---       can't be computed from this table and the metric should come off
---       the dashboard card rather than staying as a permanent zero.
-CREATE OR REPLACE VIEW v_event_health AS
+--   events.clock_skew, events.received_at             -- CONFIRMED 2026-08-17
+--       against the live schema (list_tables via the newly-connected
+--       supabase_tc_event_tracker MCP). clock_skew is a server-computed
+--       boolean (default false) -- using it directly rather than the
+--       previous plan of diffing occurred_at against received_at ourselves
+--       with a guessed threshold: the server's own flag is authoritative,
+--       whatever its actual threshold is, and doesn't need this view to
+--       guess at one.
+--
+-- security_invoker=true -- see 01_v_retention.sql's header for why.
+CREATE OR REPLACE VIEW v_event_health WITH (security_invoker = true) AS
 SELECT
     occurred_at::date AS day,
     app_id,
     count(*) AS event_count,
     count(*) FILTER (WHERE (properties->>'dropped_since_last')::int > 0) AS events_reporting_drops,
-    coalesce(sum((properties->>'dropped_since_last')::int), 0) AS queue_dropped_total
-    -- , round(
-    --     count(*) FILTER (WHERE abs(extract(epoch FROM (received_at - occurred_at))) > 300)::numeric
-    --     / NULLIF(count(*), 0),
-    --     4
-    -- ) AS clock_skew_ratio
+    coalesce(sum((properties->>'dropped_since_last')::int), 0) AS queue_dropped_total,
+    count(*) FILTER (WHERE clock_skew) AS clock_skew_events,
+    round(
+        count(*) FILTER (WHERE clock_skew)::numeric / NULLIF(count(*), 0),
+        4
+    ) AS clock_skew_ratio
 FROM events
 GROUP BY 1, 2
 ORDER BY 1, 2;
+
+COMMENT ON VIEW v_event_health IS
+  'PLAN-0815 §3.2. clock_skew_ratio uses the server-computed events.clock_skew flag directly (confirmed to exist 2026-08-17), not a client/server timestamp diff computed here.';
 
 -- Verification: SELECT * FROM v_event_health ORDER BY day DESC LIMIT 10;
 --   Sane result: event_count roughly steady day-to-day for an app with
@@ -42,3 +45,5 @@ ORDER BY 1, 2;
 --   should be a small fraction of event_count under normal network
 --   conditions -- a large fraction is itself worth investigating (a flaky
 --   ingest endpoint, an aggressive ad-blocker pattern match, etc).
+--   clock_skew_ratio should be near 0 under normal conditions -- a spike
+--   means client clocks are meaningfully wrong for a chunk of traffic.

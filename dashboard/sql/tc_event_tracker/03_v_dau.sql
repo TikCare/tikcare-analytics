@@ -3,15 +3,12 @@
 -- Columns used, and confidence:
 --   events.occurred_at, app_id, user_id             -- CONFIRMED (client payload)
 --   user_first_seen.first_seen_at, user_id           -- per plan doc prose
---   user_first_seen.app_id                           -- ASSUMED. Three apps almost
---       certainly have disjoint user bases (separate Supabase auth realms per
---       product), so a per-app cohort dimension is the more likely design --
---       but I've never seen this table's actual columns. If user_first_seen
---       has no app_id, drop the join condition below (new_users becomes a
---       cross-app daily count, which will overcount when joined per-app --
---       in that case report new_users as its own ungrouped-by-app result
---       instead of joining it into this view).
-CREATE OR REPLACE VIEW v_dau AS
+--   user_first_seen.app_id                           -- CONFIRMED 2026-08-17
+--       (live schema) -- the ASSUMED tag from this view's first draft turned
+--       out correct.
+--
+-- security_invoker=true -- see 01_v_retention.sql's header for why.
+CREATE OR REPLACE VIEW v_dau WITH (security_invoker = true) AS
 WITH daily_active AS (
     SELECT occurred_at::date AS day, app_id, count(DISTINCT user_id) AS dau
     FROM events

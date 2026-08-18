@@ -2,7 +2,16 @@
 --
 -- Columns used, and confidence:
 --   events.user_id, events.occurred_at            -- CONFIRMED (client payload, tikcare-analytics/src/index.js)
---   user_first_seen.user_id, .first_seen_at        -- per plan doc prose, not independently verified
+--   user_first_seen.user_id, .first_seen_at        -- CONFIRMED 2026-08-17 (live schema)
+--
+-- security_invoker=true (all four views in this directory): Postgres/Supabase
+-- default views to SECURITY DEFINER, which would run as the view's creator
+-- rather than the querying role -- flagged ERROR by the security advisor the
+-- moment these were first applied. Doesn't change today's behavior (the
+-- dashboard-stats-events function reads these via the service-role key, which
+-- already bypasses RLS regardless), but a future SELECT grant to
+-- anon/authenticated would otherwise silently bypass events/user_first_seen's
+-- RLS entirely -- fixed at creation time instead of left as a dormant risk.
 --
 -- Exact-day D1/D7/D30: "any event on exactly the nth day after the anchor."
 -- Denominator is right-censored -- a cohort member only counts toward D7
@@ -18,7 +27,7 @@
 -- at today's event volume (low thousands); if this ever gets slow, the fix
 -- is a pre-aggregated (user_id, active_date) materialized table, not a
 -- rewrite of this view's logic.
-CREATE OR REPLACE VIEW v_retention AS
+CREATE OR REPLACE VIEW v_retention WITH (security_invoker = true) AS
 WITH cohorts AS (
     SELECT
         user_id,

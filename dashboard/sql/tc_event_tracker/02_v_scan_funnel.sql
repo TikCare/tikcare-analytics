@@ -11,20 +11,18 @@
 --                                                        present on scan_failed rows;
 --                                                        NULL on scan_started/completed
 --                                                        by design, not a data gap
---   events.device_type                              -- ASSUMED. Plan doc says the
---                                                        server derives this from
---                                                        user_agent; I've never seen
---                                                        the column. If it doesn't
---                                                        exist under this name, either
---                                                        rename this reference or drop
---                                                        the column and slice by
---                                                        cpu_cores alone until it does.
+--   events.device_type                              -- CONFIRMED 2026-08-17 (live
+--                                                        schema) -- the ASSUMED tag
+--                                                        from this view's first draft
+--                                                        turned out correct.
+--
+-- security_invoker=true -- see 01_v_retention.sql's header for why.
 --
 -- One row per (day, app, device_type, cpu_cores, reason) -- reason is NULL
 -- for started/completed rows, which is exactly what lets a single view serve
 -- both "top-line funnel" (sum started/completed, ignore reason) and "failure
 -- breakdown" (filter failed > 0, group by reason/device_type/cpu_cores).
-CREATE OR REPLACE VIEW v_scan_funnel AS
+CREATE OR REPLACE VIEW v_scan_funnel WITH (security_invoker = true) AS
 SELECT
     occurred_at::date AS day,
     app_id,
