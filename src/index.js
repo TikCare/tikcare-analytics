@@ -9,7 +9,7 @@ import { newId, getAnonymousId, getSessionId, isReturning } from './id.js';
 import { sanitizeProps, uuidOrNull, scrubPath } from './sanitize.js';
 import { collectContext, collectUtm } from './context.js';
 import { configureQueue, enqueue, flushQueue, claimDropCount } from './queue.js';
-import { attachAutocapture } from './autocapture.js';
+import { attachAutocapture, attachExposure } from './autocapture.js';
 
 export { EVENTS } from './taxonomy.js';
 
@@ -30,10 +30,21 @@ export function init(config) {
   try {
     if (!config || !config.url || !config.ingestKey) return; // missing config → whole module no-ops
     returning = isReturning(); // must be read BEFORE getAnonymousId() creates the id
-    cfg = { autoCapture: { clicks: true }, ...config };
+    // Deep-merge autoCapture so a partial override ({ allClickables: true })
+    // doesn't silently wipe the clicks/views defaults.
+    cfg = {
+      ...config,
+      autoCapture: { clicks: true, views: true, ...(config.autoCapture || {}) },
+    };
     utm = collectUtm();
     configureQueue({ url: cfg.url, ingestKey: cfg.ingestKey });
-    if (cfg.autoCapture.clicks !== false) attachAutocapture(trackInternal);
+    if (cfg.autoCapture.clicks !== false) {
+      attachAutocapture(trackInternal, {
+        allClickables: cfg.autoCapture.allClickables === true,
+      });
+    }
+    // views defaults ON but is inert until an element carries data-track-view.
+    if (cfg.autoCapture.views !== false) attachExposure(trackInternal);
   } catch {
     cfg = null;
   }

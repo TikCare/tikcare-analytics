@@ -49,7 +49,7 @@ crash the host app).
 | `getPagePath` | `() => string` | — | **Return a route template, not the raw pathname**, for any parameterized route (e.g. `/book/:ailmentId`, not `/book/headache`) — see [Route templating](#route-templating). `scrubPath()` also defensively replaces any UUID/numeric path segment with `:id` as a second layer, but don't rely on that alone. |
 | `enabled` | `() => boolean` | — | Kill switch, checked before every event. A throwing/absent predicate fails closed (`false`). |
 | `getIdentityConsent` | `() => boolean` | — | See [Consent model](#consent-model-mock_id-policy). A throwing/absent predicate fails closed (no identity attached). |
-| `autoCapture` | `{ clicks?: boolean }` | — | Defaults to `{ clicks: true }`. Set `clicks: false` to disable automatic `element_clicked` capture on `[data-track-id]` elements. |
+| `autoCapture` | `{ clicks?, allClickables?, views? }` | — | Defaults to `{ clicks: true, allClickables: false, views: true }`. See [Autocapture](#autocapture-clicks--exposure). |
 
 ### Other exports
 
@@ -63,6 +63,39 @@ crash the host app).
 - `flush()` — force an immediate queue flush (events otherwise batch at 20
   events or every 10s, whichever comes first). Rarely needed directly.
 - `EVENTS` — the shared event-name taxonomy, re-exported from `taxonomy.js`.
+
+## Autocapture (clicks + exposure)
+
+**Clicks (`clicks: true`, default).** One delegated `click` listener fires
+`element_clicked` for the nearest `[data-track-id]` ancestor of the click
+target. Extra `data-track-*` attributes ride along as properties
+(`data-track-provider-id="x"` → `provider_id: "x"`), subject to the
+property whitelist. No attribute → no event.
+
+**All clickables (`allClickables: true`, opt-in).** Widens the match to any
+`button` / `a[href]` / `[role="button"]` / `input[type=submit|button]` /
+`summary`, so unmarked buttons report too. `element_id` falls back through
+`id` → `data-testid` → `name` → an `auto:`-prefixed DOM path
+(`auto:main>section:nth-of-type(2)>button`). Two caveats, by design:
+
+- The SDK **never reads element text or `aria-label`** — in health apps both
+  routinely contain PHI. Auto ids come only from developer-authored
+  attributes or DOM structure.
+- `auto:` DOM paths are **unstable across UI refactors**. Treat them as a
+  safety net for discovering unmarked hot spots; anything you chart
+  long-term should still carry an explicit `data-track-id`.
+- An explicitly-marked ancestor beats an anonymous clickable: a
+  `data-track-id` on a container keeps aggregating its children's clicks.
+
+**Exposure (`views: true`, default).** `element_viewed` fires for elements
+marked `data-track-view="some_id"` once they've been ≥50% visible for ~1s,
+once per mounted element (an `IntersectionObserver` + `MutationObserver`
+pair; silently absent on browsers without them). SPA route changes need no
+reset hook — React remounts a revisited page's elements as fresh nodes, so
+they re-fire, while persistent chrome (nav bars) fires once. Exposure is
+**opt-in per element** on purpose: exposure volume dwarfs clicks, and
+auto-observing every section would be noise plus ingest cost. Extra
+`data-track-*` attributes ride along exactly as with clicks.
 
 ## Consent model (`mock_id` policy)
 

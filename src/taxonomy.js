@@ -5,6 +5,7 @@ export const EVENTS = {
   // universal
   PAGE_VIEWED: 'page_viewed',
   ELEMENT_CLICKED: 'element_clicked',
+  ELEMENT_VIEWED: 'element_viewed',             // exposure: [data-track-view] ≥50% visible for ~1s
   SIGNUP_COMPLETED: 'signup_completed',
   LOGIN_SUCCEEDED: 'login_succeeded',
   // medical-scribe (附录A §9.4)

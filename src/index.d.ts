@@ -10,7 +10,22 @@ export interface Identity {
 }
 
 export interface AutoCaptureConfig {
+  /** element_clicked on [data-track-id] elements. Default true. */
   clicks?: boolean;
+  /**
+   * Also capture clicks on unmarked button / a[href] / [role=button] /
+   * input[type=submit|button] / summary. element_id falls back to
+   * id → data-testid → name → an `auto:` DOM path (UNSTABLE across UI
+   * refactors — long-term-tracked buttons should still get data-track-id).
+   * Never reads element text or aria-label (PHI). Default false.
+   */
+  allClickables?: boolean;
+  /**
+   * element_viewed exposure capture on [data-track-view] elements: fires once
+   * per mounted element after ≥50% visibility for ~1s. Opt-in per element —
+   * with no marked elements this is inert. Default true.
+   */
+  views?: boolean;
 }
 
 export interface InitConfig {
