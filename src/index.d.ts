@@ -21,11 +21,14 @@ export interface AutoCaptureConfig {
    */
   allClickables?: boolean;
   /**
-   * element_viewed exposure capture on [data-track-view] elements: fires once
-   * per mounted element after ≥50% visibility for ~1s. Opt-in per element —
-   * with no marked elements this is inert. Default true.
+   * element_viewed exposure capture: fires once per mounted element after
+   * ≥50% visibility for ~1s. `true` (default) observes only
+   * [data-track-view] elements — inert until one exists. `'all'` also
+   * observes every clickable (same selector as allClickables); unmarked
+   * elements fall back to id/data-testid/name/`auto:` DOM-path ids, and a
+   * data-track-view attribute always wins as the id. `false` disables.
    */
-  views?: boolean;
+  views?: boolean | 'all';
 }
 
 export interface InitConfig {

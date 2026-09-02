@@ -90,12 +90,19 @@ export function attachAutocapture(track, opts = {}) {
   );
 }
 
-// Exposure capture: element_viewed for [data-track-view] elements, opt-in per
-// element (exposure volume dwarfs clicks — auto-observing everything would be
-// noise + ingest cost). Fires once per mounted element after it has been
-// ≥50% visible for dwellMs continuously. SPA route changes need no reset
-// hook: React remounts the page's elements as new nodes, so revisiting a
-// page re-fires naturally, while persistent chrome (nav bars) fires once.
+// Exposure capture: element_viewed, fired once per mounted element after it
+// has been ≥50% visible for dwellMs continuously. Two modes:
+//   default      — opt-in: only [data-track-view] elements are observed.
+//   all          — every clickable (same selector as click autocapture) is
+//                  observed too; element_id falls back through autoElementId,
+//                  so unmarked buttons report 'auto:' DOM paths. Exposure
+//                  volume dwarfs clicks — expect roughly (buttons per page ×
+//                  page views) events; keep an eye on ingest cost.
+// A data-track-view attribute always wins as the element_id, so key sections
+// keep a stable, human-readable name in either mode.
+// SPA route changes need no reset hook: React remounts the page's elements as
+// new nodes, so revisiting a page re-fires naturally, while persistent chrome
+// (nav bars) fires once.
 export function attachExposure(track, opts = {}) {
   if (
     typeof IntersectionObserver === 'undefined' ||
@@ -104,6 +111,9 @@ export function attachExposure(track, opts = {}) {
     return; // old WebView etc. — exposure is best-effort, never a crash
   }
   const dwellMs = opts.dwellMs ?? 1000;
+  const selector = opts.all
+    ? `[data-track-view], ${CLICKABLE_SELECTOR}`
+    : '[data-track-view]';
   const seen = new WeakSet();
   const timers = new WeakMap();
 
@@ -125,7 +135,7 @@ export function attachExposure(track, opts = {}) {
                   timers.delete(el);
                   io.unobserve(el);
                   track('element_viewed', readTrackProps(el), {
-                    element_id: el.getAttribute('data-track-view'),
+                    element_id: el.getAttribute('data-track-view') || autoElementId(el),
                   });
                 }, dwellMs),
               );
@@ -147,11 +157,11 @@ export function attachExposure(track, opts = {}) {
 
   const scan = (root) => {
     try {
-      if (root.matches && root.matches('[data-track-view]') && !seen.has(root)) {
+      if (root.matches && root.matches(selector) && !seen.has(root)) {
         io.observe(root);
       }
       if (root.querySelectorAll) {
-        for (const el of root.querySelectorAll('[data-track-view]')) {
+        for (const el of root.querySelectorAll(selector)) {
           if (!seen.has(el)) io.observe(el);
         }
       }

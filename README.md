@@ -49,7 +49,7 @@ crash the host app).
 | `getPagePath` | `() => string` | — | **Return a route template, not the raw pathname**, for any parameterized route (e.g. `/book/:ailmentId`, not `/book/headache`) — see [Route templating](#route-templating). `scrubPath()` also defensively replaces any UUID/numeric path segment with `:id` as a second layer, but don't rely on that alone. |
 | `enabled` | `() => boolean` | — | Kill switch, checked before every event. A throwing/absent predicate fails closed (`false`). |
 | `getIdentityConsent` | `() => boolean` | — | See [Consent model](#consent-model-mock_id-policy). A throwing/absent predicate fails closed (no identity attached). |
-| `autoCapture` | `{ clicks?, allClickables?, views? }` | — | Defaults to `{ clicks: true, allClickables: false, views: true }`. See [Autocapture](#autocapture-clicks--exposure). |
+| `autoCapture` | `{ clicks?, allClickables?, views? }` | — | Defaults to `{ clicks: true, allClickables: false, views: true }`; `views: 'all'` = auto exposure on every clickable. See [Autocapture](#autocapture-clicks--exposure). |
 
 ### Other exports
 
@@ -92,10 +92,16 @@ marked `data-track-view="some_id"` once they've been ≥50% visible for ~1s,
 once per mounted element (an `IntersectionObserver` + `MutationObserver`
 pair; silently absent on browsers without them). SPA route changes need no
 reset hook — React remounts a revisited page's elements as fresh nodes, so
-they re-fire, while persistent chrome (nav bars) fires once. Exposure is
-**opt-in per element** on purpose: exposure volume dwarfs clicks, and
-auto-observing every section would be noise plus ingest cost. Extra
+they re-fire, while persistent chrome (nav bars) fires once. Extra
 `data-track-*` attributes ride along exactly as with clicks.
+
+**Auto exposure (`views: 'all'`).** Additionally observes every clickable
+(the `allClickables` selector), no markers needed; unmarked elements fall
+back through the same `id` → `data-testid` → `name` → `auto:` DOM-path id
+chain, and a `data-track-view` attribute always wins so key sections keep a
+readable name. Mind the volume: this emits roughly (visible buttons per
+page × page views) events, which dwarfs click volume — watch ingest cost
+before enabling it in a high-traffic app.
 
 ## Consent model (`mock_id` policy)
 

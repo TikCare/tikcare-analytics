@@ -43,8 +43,11 @@ export function init(config) {
         allClickables: cfg.autoCapture.allClickables === true,
       });
     }
-    // views defaults ON but is inert until an element carries data-track-view.
-    if (cfg.autoCapture.views !== false) attachExposure(trackInternal);
+    // views: true (default) observes only [data-track-view] elements — inert
+    // until one exists; 'all' also observes every clickable (auto exposure).
+    if (cfg.autoCapture.views !== false) {
+      attachExposure(trackInternal, { all: cfg.autoCapture.views === 'all' });
+    }
   } catch {
     cfg = null;
   }
