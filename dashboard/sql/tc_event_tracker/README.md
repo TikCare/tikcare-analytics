@@ -66,3 +66,13 @@ DROP VIEW IF EXISTS v_event_health;
 Each view file's own trailing comment has a `SELECT * FROM v_... LIMIT 10;`
 smoke query with a one-line note on what a sane result looks like. Run all
 four before wiring the `dashboard-stats` edge function to them.
+
+## 05_events_daily_rollup.sql — retention guardrail (added 2026-09-02)
+
+Not a view: enables pg_cron, creates the `events_daily` aggregate table,
+backfills it from history, and schedules a nightly job (03:00 HKT) that
+rolls up yesterday's raw events and deletes raw rows older than 90 days.
+Motivation: autocapture v1.6.0 (allClickables + views:'all') multiplies
+event volume ~10x, and TC_EVENT_TRACKER shares one Pro-plan database.
+Long-term trend queries should read `events_daily`; per-event forensics
+stay possible for the trailing 90 days in `events`.
