@@ -13,7 +13,8 @@
 -- re-scheduling the job WILL duplicate rows / error on a duplicate jobname —
 -- check `select * from cron.job;` first if unsure.
 --
--- Applied to TC_EVENT_TRACKER: 2026-09-02 (see git history of this file).
+-- Applied to TC_EVENT_TRACKER: 2026-09-03. Verified: cron.job active, backfill
+-- sum(n)=4862 == raw rows before that day (exact), RLS enabled on events_daily.
 
 -- 1) pg_cron: in-database scheduler (was not enabled on this project).
 create extension if not exists pg_cron;
