@@ -33,18 +33,27 @@ create table if not exists events_daily (
 );
 create index if not exists events_daily_day_app on events_daily (day, app_id);
 
--- 3) One-time backfill: aggregate every full day before today. The nightly
---    job (step 4) only ever processes "yesterday", so backfill + job never
---    overlap as long as this runs on the same day the job is scheduled.
+-- 3) One-time backfill: aggregate every full day before today (UTC). NOTE:
+--    the first nightly run WILL re-process the last backfilled day (see the
+--    timezone note in step 4) — harmless now that the job deletes its target
+--    day first, but this is why 2026-09-02 was doubled on the first night.
 insert into events_daily
 select occurred_at::date, app_id, environment, event_name, element_id, page_path, count(*)
 from events
 where occurred_at < now()::date
 group by 1, 2, 3, 4, 5, 6;
 
--- 4) Nightly at 19:00 UTC (= 03:00 HKT): aggregate yesterday, then drop raw
---    rows older than 90 days. Adjust the interval to tune retention.
+-- 4) Nightly at 19:00 UTC (= 03:00 HKT): aggregate "yesterday" — in UTC
+--    terms, then drop raw rows older than 90 days. Timezone reality check
+--    (learned on the first night, 2026-09-03 19:00 UTC): now()::date is UTC,
+--    so at 19:00 UTC on day D this window is day D-1 — the very day the
+--    same-day backfill already covered, which doubled 2026-09-02 (886 rolled
+--    vs 443 raw; rebuilt by hand 2026-09-04). The leading DELETE makes the
+--    job idempotent so an overlap or manual rerun can never double a day
+--    again. Also note each UTC day lands ~19h after it ends (day D at 19:00
+--    UTC on D+1), so max(day) trails the calendar by design.
 select cron.schedule('events-rollup-purge', '0 19 * * *', $$
+  delete from events_daily where day = (now() - interval '1 day')::date;
   insert into events_daily
   select occurred_at::date, app_id, environment, event_name, element_id, page_path, count(*)
   from events
